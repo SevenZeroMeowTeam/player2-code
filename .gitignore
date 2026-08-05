@@ -1,0 +1,87 @@
+# ======================================================
+# Player2 项目 .gitignore
+# 密钥、构建产物、日志、本地缓存一律不提交
+# ======================================================
+
+# ---- 密钥与本地环境变量 ----
+.env
+.env.local
+.env.*.local
+backend/.env
+bridge/.env
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# ---- 证书（只保留公钥配置，绝不提交私钥）----
+deploy/certs/privkey*
+deploy/certs/*.key
+deploy/certs/*.pem
+!deploy/certs/.gitkeep
+
+# ---- Node.js / npm / pnpm / yarn ----
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+.npm
+.cache/
+.parcel-cache/
+.vite/
+.pnpm-store/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---- Gradle / Kotlin / Forge mod 构建 ----
+.gradle/
+**/.gradle/
+mod/build/
+mod/.gradle/
+*.jar
+!mod/libs/*.jar
+out/
+classes/
+
+# ---- 日志 ----
+logs/
+**/logs/
+deploy/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- IDE / 编辑器 ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---- 临时文件 / 系统垃圾 ----
+*.tmp
+*.bak
+*.old
+*.pid
+*.seed
+*.pid.lock
+
+# ---- Docker 本地数据卷（如未来挂载）----
+data/
+postgres-data/
+mongo-data/
+redis-data/
+
+# ---- 其它本地覆盖 ----
+docker-compose.override.yml
+*.override.*

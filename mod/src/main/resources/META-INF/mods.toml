@@ -1,0 +1,27 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "MIT"
+
+[[mods]]
+modId = "player2"
+version = "${version}"
+displayName = "Player2 - AI Players Mod"
+authors = "QLM"
+description = '''
+提供 Minecraft 中 AI 玩家的能力，通过 WebSocket 与 player.qlm.org.cn 连接，
+接收大模型决策并执行，同时上报感知数据。
+'''
+
+[[dependencies.player2]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.player2]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,1.21)"
+ordering = "NONE"
+side = "BOTH"

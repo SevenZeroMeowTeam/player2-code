@@ -1,0 +1,23 @@
+{
+  "name": "player2-backend",
+  "version": "1.0.0",
+  "description": "AI Player Backend Service (player.qlm.org.cn)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.1",
+    "socket.io": "^4.7.5",
+    "axios": "^1.7.2",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.3"
+  }
+}

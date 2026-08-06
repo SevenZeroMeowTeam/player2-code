@@ -24,6 +24,26 @@ grep -q "change_this\|your_real\|please_change" .env 2>/dev/null \
 
 mkdir -p deploy/certs deploy/logs/nginx
 
+# ---- DeepSeek 配置摘要 ----
+DS_URL="$(grep -E '^AI_API_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
+DS_KEY="$(grep -E '^AI_API_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
+DS_MODEL="$(grep -E '^AI_MODEL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
+DS_CHAT="$(grep -E '^AI_CHAT_MODEL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
+DS_URL="${DS_URL:-未设置}"
+DS_MODEL="${DS_MODEL:-deepseek-reasoner}"
+DS_CHAT="${DS_CHAT:-（复用 AI_MODEL）}"
+if [[ -n "$DS_KEY" && "$DS_KEY" != sk-xxx* ]]; then
+  DS_KEY_MASK="${DS_KEY:0:8}...${DS_KEY: -4}"
+else
+  DS_KEY_MASK="未设置或占位符"
+fi
+log "============ DeepSeek 配置 ============"
+echo "  API URL : ${DS_URL}"
+echo "  API Key : ${DS_KEY_MASK}"
+echo "  决策模型 : ${DS_MODEL}"
+echo "  聊天模型 : ${DS_CHAT}"
+echo "======================================="
+
 # ---- SSL 证书自动化 ----
 # 优先级：已有 Let's Encrypt → 已有 deploy/certs → certbot 自动申请 → 自签兜底
 DOMAIN_SSL="$(grep -E '^DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
@@ -150,6 +170,54 @@ docker compose ps
 
 log "健康检查（本机 8080）："
 curl -fsS http://127.0.0.1:8080/health 2>/dev/null && echo || warn "backend 8080 未响应"
+
+# ---- DeepSeek 连通性测试（在 backend 容器内执行）----
+log "============ DeepSeek 连通性测试 ============"
+if [[ "$STATUS_BACKEND" == "healthy" ]]; then
+  log "在 backend 容器内测试 AI 网关..."
+  AI_TEST_OK=0
+
+  # 构造测试请求（双 URL 回退）
+  for TEST_URL in "$DS_URL" "https://api.deepseek.com/v1"; do
+    [[ -z "$TEST_URL" || "$TEST_URL" == "未设置" ]] && continue
+    log "  尝试: ${TEST_URL}/chat/completions"
+    AI_RESP=$(docker compose exec -T backend sh -c '
+      curl -sS --max-time 60 \
+        -H "Authorization: Bearer '"${DS_KEY}"'" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"'"${DS_MODEL}"'\",\"messages\":[{\"role\":\"system\",\"content\":\"只回复ok\"},{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":20}" \
+        "'"${TEST_URL}"'/chat/completions" 2>&1
+    ' 2>&1) || true
+
+    # 检查响应中是否有 choices
+    if echo "$AI_RESP" | grep -q '"choices"'; then
+      log "  ✅ AI 网关连通成功"
+      # 尝试提取 usage
+      USAGE=$(echo "$AI_RESP" | grep -o '"usage":{[^}]*}' 2>/dev/null | head -1)
+      [[ -n "$USAGE" ]] && echo "     ${USAGE}"
+      # 尝试提取 reasoning_content（R1 思维链）
+      THINK_LEN=$(echo "$AI_RESP" | grep -o '"reasoning_content":"[^"]*"' 2>/dev/null | wc -c)
+      [[ "$THINK_LEN" -gt 30 ]] && log "  🧠 reasoning_content 思维链已启用"
+      AI_TEST_OK=1
+      break
+    elif echo "$AI_RESP" | grep -qi 'error\|invalid\|unauthorized\|429'; then
+      warn "  ❌ ${TEST_URL} 返回错误：$(echo "$AI_RESP" | head -c 200)"
+    else
+      warn "  ❌ ${TEST_URL} 无有效响应：$(echo "$AI_RESP" | head -c 200)"
+    fi
+  done
+
+  if [[ "$AI_TEST_OK" -eq 0 ]]; then
+    warn "DeepSeek 连通性测试失败！请检查："
+    echo "    1. AI_API_KEY 是否正确（DeepSeek 控制台：platform.deepseek.com）"
+    echo "    2. AI_API_URL 是否可达（本服务器能否访问该域名）"
+    echo "    3. DeepSeek 账户余额是否充足"
+    echo "    4. 手动测试：docker compose exec -T backend bash deploy/test-ai.sh"
+  fi
+else
+  warn "backend 未健康，跳过 DeepSeek 连通性测试"
+fi
+echo "==========================================="
 
 log ""
 log "============ 部署完成 ============"

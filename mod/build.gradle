@@ -1,19 +1,16 @@
 buildscript {
     repositories {
         maven { url = 'https://maven.minecraftforge.net' }
-        maven { url = 'https://maven.parchmentmc.org' }
         mavenCentral()
         gradlePluginPortal()
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.23'
-        classpath 'org.parchmentmc:librarian:1.+'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
     }
 }
 
 apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'org.parchmentmc.librarian'
 apply plugin: 'org.jetbrains.kotlin.jvm'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
@@ -28,10 +25,9 @@ java {
 }
 
 minecraft {
-    mappings(
-        'parchment',
-        '2023.09.03-1.20.1'
-    )
+    mappings {
+        parchment('2023.09.03-1.20.1')
+    }
 
     runs {
         create('client') {

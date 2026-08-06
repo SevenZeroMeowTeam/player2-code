@@ -31,7 +31,7 @@ repositories {
 }
 
 dependencies {
-    minecraft("net.minecraftforge:forge:1.20.1-47.2.0")
+    minecraft("net.minecraftforge:forge:1.20.1-47.4.22")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("com.neovisionaries:nv-websocket-client:2.14")

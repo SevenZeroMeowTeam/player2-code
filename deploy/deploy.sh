@@ -177,9 +177,12 @@ if [[ "$STATUS_BACKEND" == "healthy" ]]; then
   log "在 backend 容器内测试 AI 网关..."
   AI_TEST_OK=0
 
-  # 构造测试请求（双 URL 回退）
-  for TEST_URL in "$DS_URL" "https://api.deepseek.com/v1"; do
+  # 构造测试请求（三 URL 回退：.env 配置 → ai.bbsmc.org.cn → 官方）
+  ALL_TEST_URLS=("$DS_URL" "https://ai.bbsmc.org.cn/v1" "https://api.deepseek.com/v1")
+  for TEST_URL in "${ALL_TEST_URLS[@]}"; do
     [[ -z "$TEST_URL" || "$TEST_URL" == "未设置" ]] && continue
+    # 跳过已尝试过的重复 URL
+    [[ "$TEST_URL" == "$LAST_TRIED_URL" ]] && continue
     log "  尝试: ${TEST_URL}/chat/completions"
     AI_RESP=$(docker compose exec -T backend sh -c '
       curl -sS --max-time 60 \
@@ -205,6 +208,7 @@ if [[ "$STATUS_BACKEND" == "healthy" ]]; then
     else
       warn "  ❌ ${TEST_URL} 无有效响应：$(echo "$AI_RESP" | head -c 200)"
     fi
+    LAST_TRIED_URL="$TEST_URL"
   done
 
   if [[ "$AI_TEST_OK" -eq 0 ]]; then

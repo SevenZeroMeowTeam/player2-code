@@ -2,7 +2,7 @@ plugins {
     kotlin("jvm") version "1.9.20"
     id("eclipse")
     id("maven-publish")
-    id("net.minecraftforge.gradle") version "5.1.+"
+    id("net.minecraftforge.gradle") version "5.1.23"
     id("org.parchmentmc.data") version "1.3.1"
 }
 

@@ -147,7 +147,7 @@ const playerList = computed(() => Array.from(socket.players.entries()).map(([id,
 
 function colorOf(s) {
   let h = 0; for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) & 0xffff
-  return `hsl(${h % 360, 60%, 60%)`
+  return `hsl(${h % 360}, 60%, 60%)`
 }
 
 function createPlayer() {

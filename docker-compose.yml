@@ -49,6 +49,28 @@ services:
         max-size: "20m"
         max-file: "3"
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: player2-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - player2-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   nginx:
     image: nginx:1.27-bookworm
     container_name: player2-nginx
@@ -71,6 +93,9 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+volumes:
+  ollama-data:
 
 networks:
   player2-net:

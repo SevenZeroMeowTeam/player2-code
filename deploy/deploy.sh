@@ -155,6 +155,44 @@ docker compose down --remove-orphans || true
 log "启动新容器..."
 docker compose up -d
 
+# ---- Ollama 本地 DeepSeek 模型拉取 ----
+OLLAMA_MODEL="$(grep -E '^OLLAMA_MODEL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | xargs)"
+OLLAMA_MODEL="${OLLAMA_MODEL:-deepseek-r1:7b}"
+STATUS_OLLAMA="$(docker inspect -f '{{.State.Health.Status}}' player2-ollama 2>/dev/null || echo unknown)"
+
+if [[ "$STATUS_OLLAMA" != "unknown" ]]; then
+  log "============ Ollama 本地 DeepSeek 部署 ============"
+  log "等待 Ollama 容器就绪..."
+  for i in {1..30}; do
+    STATUS_OLLAMA="$(docker inspect -f '{{.State.Health.Status}}' player2-ollama 2>/dev/null || echo unknown)"
+    [[ "$STATUS_OLLAMA" == "healthy" ]] && break
+    log "  ollama=${STATUS_OLLAMA}，等待中... (${i}/30)"
+    sleep 3
+  done
+
+  if [[ "$STATUS_OLLAMA" == "healthy" ]]; then
+    # 检查模型是否已拉取
+    EXISTING_MODELS="$(docker exec player2-ollama ollama list 2>/dev/null || echo '')"
+    if echo "$EXISTING_MODELS" | grep -q "$OLLAMA_MODEL"; then
+      log "模型 ${OLLAMA_MODEL} 已存在，跳过拉取"
+    else
+      log "拉取 DeepSeek 模型：${OLLAMA_MODEL}（首次可能需要较长时间）..."
+      docker exec player2-ollama ollama pull "$OLLAMA_MODEL" 2>&1 | sed 's/^/  ollama | /' \
+        && log "模型 ${OLLAMA_MODEL} 拉取完成" \
+        || warn "模型拉取失败，可手动执行：docker exec player2-ollama ollama pull ${OLLAMA_MODEL}"
+    fi
+    echo "  本地 Ollama API : http://ollama:11434/v1"
+    echo "  模型            : ${OLLAMA_MODEL}"
+    echo "  如需切换到本地模型，编辑 .env："
+    echo "    AI_API_URL=http://ollama:11434/v1"
+    echo "    AI_API_KEY=ollama"
+    echo "    AI_MODEL=${OLLAMA_MODEL}"
+  else
+    warn "Ollama 容器未健康，跳过模型拉取"
+  fi
+  echo "================================================="
+fi
+
 log "等待健康检查..."
 sleep 5
 for i in {1..30}; do

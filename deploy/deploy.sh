@@ -176,6 +176,7 @@ log "============ DeepSeek 连通性测试 ============"
 if [[ "$STATUS_BACKEND" == "healthy" ]]; then
   log "在 backend 容器内测试 AI 网关..."
   AI_TEST_OK=0
+  LAST_TRIED_URL=""
 
   # 构造测试请求（三 URL 回退：.env 配置 → ai.bbsmc.org.cn → 官方）
   ALL_TEST_URLS=("$DS_URL" "https://ai.bbsmc.org.cn/v1" "https://api.deepseek.com/v1")

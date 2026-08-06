@@ -21,9 +21,9 @@ const io = new Server(server, {
 
 const clientRegistry = new ClientRegistry();
 const aiOrchestrator = new AIOrchestrator(
-  process.env.AI_API_URL || 'http://host.docker.internal:11434/v1',
+  process.env.AI_API_URL || 'https://ai.bbsmc.org.cn/v1',
   process.env.AI_API_KEY,
-  process.env.AI_MODEL || 'deepseek-r1:7b'
+  process.env.AI_MODEL || 'deepseek-reasoner'
 );
 
 app.get('/health', (req, res) => {

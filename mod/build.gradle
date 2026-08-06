@@ -43,12 +43,29 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
 }
 
-tasks.withType(ProcessResources) {
+// Replace @version@ token in mods.toml at UTF-8 byte level AFTER processResources
+// (processResources uses JVM default charset which is GBK on Windows, corrupting CJK)
+tasks.register('patchModsToml') {
     inputs.property('version', project.version)
-    filesMatching(['META-INF/mods.toml']) {
-        expand([version: project.version])
+    doLast {
+        def resourcesOutput = sourceSets.main.output.resourcesDir
+        def targetFile = file("$resourcesOutput/META-INF/mods.toml")
+        if (targetFile.exists()) {
+            def utf8 = java.nio.charset.StandardCharsets.UTF_8
+            def bytes = java.nio.file.Files.readAllBytes(targetFile.toPath())
+            // Even if processResources already corrupted, read source of truth from src dir
+            def srcFile = file("$projectDir/src/main/resources/META-INF/mods.toml")
+            if (srcFile.exists()) {
+                bytes = java.nio.file.Files.readAllBytes(srcFile.toPath())
+            }
+            def text = new String(bytes, utf8)
+            def replaced = text.replace('@version@', project.version as String)
+            java.nio.file.Files.write(targetFile.toPath(), replaced.getBytes(utf8))
+        }
     }
 }
+tasks.processResources.configure { finalizedBy('patchModsToml') }
+tasks.classes.configure { dependsOn('patchModsToml') }
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'

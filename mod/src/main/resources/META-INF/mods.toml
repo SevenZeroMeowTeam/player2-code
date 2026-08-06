@@ -4,7 +4,7 @@ license = "MIT"
 
 [[mods]]
 modId = "player2"
-version = "${version}"
+version = "@version@"
 displayName = "Player2 - AI Players Mod"
 authors = "QLM"
 description = '''

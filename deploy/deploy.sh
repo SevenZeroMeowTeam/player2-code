@@ -181,10 +181,10 @@ if [[ "$STATUS_OLLAMA" != "unknown" ]]; then
         && log "模型 ${OLLAMA_MODEL} 拉取完成" \
         || warn "模型拉取失败，可手动执行：docker exec player2-ollama ollama pull ${OLLAMA_MODEL}"
     fi
-    echo "  本地 Ollama API : http://ollama:11434/v1"
+    echo "  本地 Ollama API : http://host.docker.internal:11434/v1"
     echo "  模型            : ${OLLAMA_MODEL}"
     echo "  如需切换到本地模型，编辑 .env："
-    echo "    AI_API_URL=http://ollama:11434/v1"
+    echo "    AI_API_URL=http://host.docker.internal:11434/v1"
     echo "    AI_API_KEY=ollama"
     echo "    AI_MODEL=${OLLAMA_MODEL}"
   else

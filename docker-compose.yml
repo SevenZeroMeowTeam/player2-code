@@ -12,6 +12,7 @@ services:
     environment:
       - PORT=8080
       - NODE_ENV=production
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
       interval: 30s

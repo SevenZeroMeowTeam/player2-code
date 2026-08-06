@@ -186,7 +186,7 @@ if [[ "$STATUS_BACKEND" == "healthy" ]]; then
     [[ "$TEST_URL" == "$LAST_TRIED_URL" ]] && continue
     log "  尝试: ${TEST_URL}/chat/completions"
     AI_RESP=$(docker compose exec -T backend sh -c '
-      curl -sS --max-time 60 \
+      curl -sS -k --max-time 60 \
         -H "Authorization: Bearer '"${DS_KEY}"'" \
         -H "Content-Type: application/json" \
         -d "{\"model\":\"'"${DS_MODEL}"'\",\"messages\":[{\"role\":\"system\",\"content\":\"只回复ok\"},{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":20}" \

@@ -21,9 +21,9 @@ const io = new Server(server, {
 
 const clientRegistry = new ClientRegistry();
 const aiOrchestrator = new AIOrchestrator(
-  process.env.AI_API_URL || 'https://ai.bbsmc.org.cn/v1',
+  process.env.AI_API_URL || 'http://ollama:11434/v1',
   process.env.AI_API_KEY,
-  process.env.AI_MODEL || 'deepseek-reasoner'
+  process.env.AI_MODEL || 'deepseek-r1:7b'
 );
 
 app.get('/health', (req, res) => {

@@ -216,8 +216,8 @@ if [[ "$STATUS_BACKEND" == "healthy" ]]; then
   AI_TEST_OK=0
   LAST_TRIED_URL=""
 
-  # 构造测试请求（三 URL 回退：.env 配置 → ai.bbsmc.org.cn → 官方）
-  ALL_TEST_URLS=("$DS_URL" "https://ai.bbsmc.org.cn/v1" "https://api.deepseek.com/v1")
+  # 构造测试请求（三 URL 回退：.env 配置 → 本地 Ollama 宿主机端口 → 官方 API）
+  ALL_TEST_URLS=("$DS_URL" "http://host.docker.internal:11434/v1" "https://api.deepseek.com/v1")
   for TEST_URL in "${ALL_TEST_URLS[@]}"; do
     [[ -z "$TEST_URL" || "$TEST_URL" == "未设置" ]] && continue
     # 跳过已尝试过的重复 URL

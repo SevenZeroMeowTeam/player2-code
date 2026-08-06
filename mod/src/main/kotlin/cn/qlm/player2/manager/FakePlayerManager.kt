@@ -1,5 +1,6 @@
 package cn.qlm.player2.manager
 
+import cn.qlm.player2.Config
 import cn.qlm.player2.Player2Mod
 import com.mojang.authlib.GameProfile
 import net.minecraft.server.MinecraftServer

@@ -55,7 +55,7 @@ object WsBridgeClient {
                             perceptionTask?.cancel(true)
                         }
 
-                        override fun onError(websocket: WebSocket?, cause: java.lang.Exception?) {
+                        override fun onError(websocket: WebSocket?, cause: com.neovisionaries.ws.client.WebSocketException?) {
                             Player2Mod.LOG.error("[WS Error]", cause)
                         }
                     })

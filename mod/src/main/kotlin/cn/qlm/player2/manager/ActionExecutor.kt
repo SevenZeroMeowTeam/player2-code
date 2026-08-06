@@ -173,10 +173,7 @@ object ActionExecutor {
     private fun chat(p: Player, message: String?) {
         if (message == null) return
         val sp = p as? net.minecraft.server.level.ServerPlayer ?: return
-        sp.server.playerList.broadcastChatMessage(
-            net.minecraft.network.chat.Component.literal("<${p.gameProfile.name}> $message"),
-            net.minecraft.network.chat.ChatType.bind(net.minecraft.network.chat.ChatType.CHAT, sp.registryAccess(), sp.displayName),
-            sp.uuid
-        )
+        val component = net.minecraft.network.chat.Component.literal("<${p.gameProfile.name}> $message")
+        sp.sendSystemMessage(component)
     }
 }

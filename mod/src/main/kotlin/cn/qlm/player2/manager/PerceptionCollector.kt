@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
 data class PerceptionData(
@@ -55,11 +56,12 @@ object PerceptionCollector {
         val look = player.lookAngle
 
         val hit = player.pick(6.0, 1.0f, false)
-        val lookingAt = if (!hit.type.isAir && hit.blockPosition != null) {
-            val bs = level.getBlockState(hit.blockPosition)
+        val lookingAt = if (hit is BlockHitResult && hit.type != net.minecraft.world.phys.HitResult.Type.MISS) {
+            val bp = hit.blockPos
+            val bs = level.getBlockState(bp)
             LookingAtInfo(
                 name = bs.block.descriptionId,
-                x = hit.blockPosition.x, y = hit.blockPosition.y, z = hit.blockPosition.z,
+                x = bp.x, y = bp.y, z = bp.z,
                 displayName = bs.block.name.string
             )
         } else null
@@ -70,8 +72,8 @@ object PerceptionCollector {
             entities.add(
                 EntityInfo(
                     id = e.id,
-                    type = e.type.descriptionString,
-                    name = e.name.string,
+                    type = e.type.toShortString(),
+                    name = e.displayName.string,
                     x = e.x, y = e.y, z = e.z,
                     health = (e as? LivingEntity)?.health,
                     distance = player.distanceTo(e).toDouble()
@@ -95,7 +97,6 @@ object PerceptionCollector {
                 if (blocks.size >= 60) break
             }
         }
-
         val inv = (0 until player.inventory.containerSize).mapNotNull { idx ->
             val stack = player.inventory.getItem(idx)
             if (stack.isEmpty) return@mapNotNull null
@@ -123,7 +124,7 @@ object PerceptionCollector {
             inventory = inv,
             entities = entities.take(30),
             nearbyBlocks = blocks,
-            gameMode = (player as? net.minecraft.server.level.ServerPlayer)?.gameMode?.gameModeForPlayer?.name?.lowercase() ?: "survival"
+            gameMode = (player as? net.minecraft.server.level.ServerPlayer)?.gameMode?.getGameModeForPlayer()?.name?.lowercase() ?: "survival"
         )
     }
 }

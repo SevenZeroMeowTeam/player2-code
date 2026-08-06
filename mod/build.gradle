@@ -1,22 +1,9 @@
-buildscript {
-    repositories {
-        maven { url = 'https://maven.minecraftforge.net' }
-        maven { url = 'https://maven.parchmentmc.org' }
-        mavenCentral()
-        gradlePluginPortal()
-    }
-    dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:5.1.23'
-        classpath 'org.parchmentmc:librarian:1.+'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20'
-    }
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.jetbrains.kotlin.jvm' version '1.9.20'
+    id 'eclipse'
+    id 'maven-publish'
 }
-
-apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'org.parchmentmc.librarian'
-apply plugin: 'org.jetbrains.kotlin.jvm'
-apply plugin: 'eclipse'
-apply plugin: 'maven-publish'
 
 version = '1.0.0'
 group = 'cn.qlm.player2'
@@ -27,15 +14,11 @@ java {
     }
 }
 
-parchment {
-    version = '2023.09.03-1.20.1'
-}
-
 minecraft {
-    mappings = 'parchment'
+    mappings channel: 'official', version: '1.20.1'
 
     runs {
-        create('client') {
+        configureEach {
             workingDirectory = project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
@@ -45,21 +28,11 @@ minecraft {
                 }
             }
         }
-        create('server') {
-            workingDirectory = project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
-            mods {
-                create('player2') {
-                    source sourceSets.main
-                }
-            }
+        client {
+        }
+        server {
         }
     }
-}
-
-repositories {
-    mavenCentral()
 }
 
 dependencies {
@@ -73,7 +46,7 @@ dependencies {
 tasks.withType(ProcessResources) {
     inputs.property('version', project.version)
     filesMatching(['META-INF/mods.toml']) {
-        expand('version' to project.version)
+        expand([version: project.version])
     }
 }
 

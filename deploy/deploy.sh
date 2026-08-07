@@ -14,8 +14,8 @@ log()  { printf "\033[1;32m[DEPLOY]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m %s\n" "$*" >&2; }
 die()  { printf "\033[1;31m[FAIL]\033[0m %s\n" "$*" >&2; exit 1; }
 
-command -v docker >/dev/null 2>&1 || die "未安装 docker，请先运行 init-debian.sh"
-command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 || die "docker compose 不可用"
+command -v docker >/dev/null 2>&1 || die "未安装 docker，请先运行 bash deploy/init.sh（支持 Debian/RHEL/openSUSE/Arch 系）"
+command -v docker >/dev/null 2>&1 && (docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1) || die "docker compose 不可用"
 
 [[ -f .env ]] || { log ".env 缺失，复制 .env.example -> .env 请手动编辑"; cp .env.example .env; }
 grep -q "change_this\|your_real\|please_change" .env 2>/dev/null \
@@ -70,11 +70,60 @@ fi
 if ! certs_ready; then
   log "SSL 证书缺失，准备通过 certbot 自动申请（域名：${DOMAIN_SSL}）"
 
-  # 安装 certbot
+  # 安装 certbot（跨发行版）
   if ! command -v certbot >/dev/null 2>&1; then
     log "安装 certbot..."
-    apt-get update -qq && apt-get install -y -qq certbot >/dev/null 2>&1 \
-      || die "certbot 安装失败，请手动执行：apt-get install -y certbot"
+    # 识别发行版家族
+    DISTRO_FAMILY="unknown"
+    if [[ -f /etc/os-release ]]; then
+      # shellcheck disable=SC1091
+      . /etc/os-release
+      case "${ID:-}" in
+        debian|ubuntu|linuxmint|pop|kali) DISTRO_FAMILY="debian" ;;
+        rhel|centos|rocky|almalinux|ol|fedora|virtuozzo) DISTRO_FAMILY="rhel" ;;
+        opensuse*|suse|sles) DISTRO_FAMILY="suse" ;;
+        arch|manjaro|garuda|endeavouros) DISTRO_FAMILY="arch" ;;
+        *)
+          for _like in ${ID_LIKE:-}; do
+            case "$_like" in
+              debian|ubuntu) DISTRO_FAMILY="debian"; break ;;
+              rhel|fedora|centos) DISTRO_FAMILY="rhel"; break ;;
+              suse|sles) DISTRO_FAMILY="suse"; break ;;
+              arch) DISTRO_FAMILY="arch"; break ;;
+            esac
+          done
+          ;;
+      esac
+    fi
+
+    install_certbot_ok=1
+    case "$DISTRO_FAMILY" in
+      debian)
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq && apt-get install -y -qq certbot >/dev/null 2>&1 || install_certbot_ok=0
+        ;;
+      rhel)
+        if command -v dnf >/dev/null 2>&1; then
+          dnf install -y -q certbot >/dev/null 2>&1 || install_certbot_ok=0
+        else
+          yum install -y -q certbot >/dev/null 2>&1 || install_certbot_ok=0
+        fi
+        ;;
+      suse)
+        zypper --non-interactive --quiet install certbot >/dev/null 2>&1 || install_certbot_ok=0
+        ;;
+      arch)
+        pacman -Sy --noconfirm --needed certbot >/dev/null 2>&1 || install_certbot_ok=0
+        ;;
+      *)
+        warn "无法识别发行版（${ID:-unknown}），certbot 自动安装跳过"
+        install_certbot_ok=0
+        ;;
+    esac
+
+    if [[ "$install_certbot_ok" != "1" ]] || ! command -v certbot >/dev/null 2>&1; then
+      die "certbot 安装失败，请手动安装后重试（debian: apt-get install certbot | rhel: dnf install certbot | suse: zypper install certbot | arch: pacman -S certbot）"
+    fi
   fi
 
   # 检查 80 端口是否被占用（certbot standalone 需要 80 空闲）

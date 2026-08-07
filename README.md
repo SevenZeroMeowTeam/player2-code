@@ -71,8 +71,9 @@ player22/
 │       ├── bridge/WsBridgeClient.kt
 │       ├── command/Player2Commands.kt
 │       └── manager/{FakePlayerManager,PerceptionCollector,ActionExecutor}.kt
-├── deploy/               # Debian 12 生产部署脚本
-│   ├── init-debian.sh    # 系统初始化 (docker/compose/certbot/防火墙)
+├── deploy/               # 生产部署脚本（跨发行版）
+│   ├── init.sh           # 系统一键初始化 (Debian/RHEL/openSUSE/Arch 系自动识别)
+│   ├── init-debian.sh    # 兼容入口，转发到 init.sh
 │   ├── preflight.sh      # 部署前预检 (环境/权限/端口/依赖)
 │   ├── deploy.sh         # 构建 + docker compose up -d
 │   ├── test-ai.sh        # AI 网关连通性测试 (Linux)
@@ -224,14 +225,25 @@ curl http://localhost/health               # {"status":"ok","onlineClients":0}
 
 ---
 
-## 六、生产部署（Debian 12 6 步速查）
+## 六、生产部署（6 步速查，跨 Linux 发行版）
 
 域名：`player.qlm.org.cn`，提前把 A 记录指向服务器公网 IP。
 
+**支持的一键初始化发行版**（`deploy/init.sh` 自动识别 `/etc/os-release`）：
+
+| 家族 | 发行版 | 包管理 | 防火墙 |
+|------|--------|--------|--------|
+| Debian 系 | Debian 11/12, Ubuntu 20.04+, LinuxMint, Pop!_OS | apt | ufw |
+| RHEL 系 | RHEL 8/9, CentOS Stream, Rocky, AlmaLinux, Oracle Linux, Fedora | dnf/yum | firewalld |
+| openSUSE 系 | Tumbleweed, Leap 15.5+ | zypper | firewalld |
+| Arch 系 | Arch, Manjaro | pacman | ufw |
+
+> Debian/Ubuntu 用户仍可用 `bash deploy/init-debian.sh`（兼容入口，转发到 `init.sh`）。
+
 ```bash
-# ① 克隆 + 系统初始化（docker/compose/certbot/UFW/自动更新）
+# ① 克隆 + 系统初始化（自动识别发行版，装 docker/compose/certbot/防火墙/调优）
 git clone <YOUR_REPO> player22 && cd player22
-bash deploy/init-debian.sh
+sudo bash deploy/init.sh
 
 # ② 填密钥（只改 AI_API_KEY 那行）
 cp .env.example .env && nano .env
@@ -248,7 +260,7 @@ bash deploy/copy-certs.sh
 bash deploy/deploy.sh
 
 # ⑥ 三件套验证
-bash deploy/status.sh          # 3 容器 healthy
+bash deploy/status.sh          # 容器 healthy
 bash deploy/test-ai.sh         # AI 返回 ok:true
 curl -I https://player.qlm.org.cn   # HTTP/2 200 + HSTS
 ```

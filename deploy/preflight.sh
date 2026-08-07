@@ -27,13 +27,43 @@ echo
 # ---------------- 1. OS / 权限 ----------------
 echo "[1] 系统环境"
 ID=""
+ID_LIKE=""
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
   ID="${ID:-unknown}"
+  ID_LIKE="${ID_LIKE:-}"
   echo "    系统: ${PRETTY_NAME:-unknown}"
 fi
-if [[ "$ID" =~ ^(debian|ubuntu)$ ]]; then pass "发行版 $ID 兼容"; else warn "推荐 Debian / Ubuntu，当前 $ID 可能有兼容问题"; fi
+
+# 归类到家族：debian / rhel / suse / arch / unknown
+detect_family() {
+  case "$1" in
+    debian|ubuntu|linuxmint|pop|kali) echo "debian" ;;
+    rhel|centos|rocky|almalinux|ol|fedora|virtuozzo) echo "rhel" ;;
+    opensuse*|suse|sles) echo "suse" ;;
+    arch|manjaro|garuda|endeavouros) echo "arch" ;;
+    *)
+      for _like in $2; do
+        case "$_like" in
+          debian|ubuntu) echo "debian"; return ;;
+          rhel|fedora|centos) echo "rhel"; return ;;
+          suse|sles) echo "suse"; return ;;
+          arch) echo "arch"; return ;;
+        esac
+      done
+      echo "unknown"
+      ;;
+  esac
+}
+FAMILY=$(detect_family "$ID" "$ID_LIKE")
+case "$FAMILY" in
+  debian) pass "发行版家族：debian 系（$ID）— 走 apt" ;;
+  rhel)   pass "发行版家族：rhel 系（$ID）— 走 dnf/yum" ;;
+  suse)   pass "发行版家族：suse 系（$ID）— 走 zypper" ;;
+  arch)   pass "发行版家族：arch 系（$ID）— 走 pacman" ;;
+  *)      warn "发行版 $ID 不在自动支持列表（Debian/RHEL/openSUSE/Arch），可能需要手动安装依赖" ;;
+esac
 [[ $EUID -eq 0 ]] && pass "root 用户" || warn "非 root，若 docker 命令报权限错误请加 sudo 或把用户加入 docker 组"
 MEM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo)
 MEM_GB=$(( MEM_KB / 1024 / 1024 ))
@@ -51,12 +81,14 @@ if command -v docker >/dev/null 2>&1; then
   pass "docker 已安装: $(docker --version 2>&1 | head -1)"
   if docker compose version >/dev/null 2>&1; then
     pass "Docker Compose v2: $(docker compose version 2>&1 | head -1)"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    pass "docker-compose（独立二进制）: $(docker-compose version 2>&1 | head -1)"
   else
-    fail "未检测到 docker compose 插件；请执行：apt-get install -y docker-compose-plugin"
+    fail "未检测到 docker compose；请执行：bash deploy/init.sh（或对应家族：apt/dnf/zypper/pacman 安装 docker-compose-plugin）"
   fi
   systemctl is-active --quiet docker 2>/dev/null && pass "Docker 服务运行中" || fail "Docker 服务未启动；systemctl enable --now docker"
 else
-  fail "未安装 Docker，请先执行 bash deploy/init-debian.sh"
+  fail "未安装 Docker，请先执行 bash deploy/init.sh"
 fi
 
 # ---------------- 3. 端口占用 ----------------
@@ -76,15 +108,23 @@ for p in 80 443 8080; do
   fi
 done
 
-# ---------------- 4. UFW / 安全组 ----------------
+# ---------------- 4. 防火墙 / 安全组 ----------------
 echo
 echo "[4] 防火墙 / 安全组提示（仅提示）"
-if command -v ufw >/dev/null && ufw status | head -1 | grep -q active; then
+if command -v ufw >/dev/null && ufw status 2>/dev/null | head -1 | grep -q active; then
   for p in 22/tcp 80/tcp 443/tcp; do
     ufw status | grep -qw "$p" && pass "UFW 允许 $p" || warn "UFW 未见明确允许 $p；如果外部访问失败，请：ufw allow $p"
   done
+elif command -v firewall-cmd >/dev/null && firewall-cmd --state 2>/dev/null | grep -q running; then
+  for p in 22/tcp 80/tcp 443/tcp; do
+    if firewall-cmd --list-ports 2>/dev/null | grep -qw "${p%/*}" || firewall-cmd --list-services 2>/dev/null | grep -qw "$( [[ $p == 22/* ]] && echo ssh || echo '' )"; then
+      pass "firewalld 允许 $p"
+    else
+      warn "firewalld 未见明确允许 $p；如外部访问失败，请：firewall-cmd --permanent --add-port=$p && firewall-cmd --reload"
+    fi
+  done
 else
-  warn "UFW 未激活。确保云厂商安全组/硬件防火墙放行了 22 / 80 / 443"
+  warn "未检测到 ufw / firewalld。确保云厂商安全组/硬件防火墙放行了 22 / 80 / 443"
 fi
 
 # ---------------- 5. .env 配置文件 ----------------

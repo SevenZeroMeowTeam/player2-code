@@ -1,6 +1,14 @@
-# Player2 · Debian Linux 服务器完整搭建手册
+# Player2 · Linux 服务器完整搭建手册
 
-> 适用系统：**Debian 12 (bookworm)** （Debian 11 bullseye 同样兼容，仅部分 apt 包版本不同）
+> 适用系统：**Debian 12 (bookworm)** 为主要示例（手册以 apt/ufw 命令演示）。
+> `deploy/init.sh` 已支持自动识别以下发行版，非 Debian 系会自动走对应包管理与防火墙：
+> - **Debian 系**：Debian 11/12, Ubuntu 20.04+, LinuxMint, Pop!_OS（apt + ufw）
+> - **RHEL 系**：RHEL 8/9, CentOS Stream, Rocky, AlmaLinux, Oracle Linux, Fedora（dnf/yum + firewalld，自动启用 EPEL）
+> - **openSUSE 系**：Tumbleweed, Leap 15.5+（zypper + firewalld）
+> - **Arch 系**：Arch, Manjaro（pacman + ufw）
+>
+> 下文遇到 `apt`/`ufw` 字样的命令，RHEL 系对应 `dnf`/`firewall-cmd`，openSUSE 对应 `zypper`/`firewall-cmd`，Arch 对应 `pacman`/`ufw`。直接跑 `bash deploy/init.sh` 即可自动适配。
+>
 > 服务域名：`player.qlm.org.cn`
 > AI 大模型：`ai.bbsmc.org.cn` 上部署的 **DeepSeek R1**（OpenAI 兼容协议）
 > 部署方式：Docker + Docker Compose v2（官方插件版 `docker compose`）
@@ -11,7 +19,7 @@
 
 - [0. 准备工作](#0-准备工作)
 - [1. 上传项目代码到服务器](#1-上传项目代码到服务器)
-- [2. Debian 系统初始化](#2-debian-系统初始化)
+- [2. Linux 系统初始化（跨发行版）](#2-linux-系统初始化跨发行版)
   - [2.1 一键脚本](#21-一键脚本)
   - [2.2 手动逐步执行（便于排查）](#22-手动逐步执行便于排查)
 - [3. 配置环境变量 `.env`](#3-配置环境变量-env)
@@ -115,7 +123,7 @@ cd /opt/player22
 
 ---
 
-## 2. Debian 系统初始化
+## 2. Linux 系统初始化（跨发行版）
 
 给脚本可执行权限：
 
@@ -123,25 +131,26 @@ cd /opt/player22
 cd /opt/player22
 chmod +x deploy/*.sh
 ls deploy/*.sh
-# init-debian.sh  deploy.sh  copy-certs.sh  logs.sh  preflight.sh  status.sh  test-ai.sh
+# init.sh  init-debian.sh  deploy.sh  copy-certs.sh  logs.sh  preflight.sh  status.sh  test-ai.sh
 ```
 
 ### 2.1 一键脚本
 
 ```bash
-sudo bash deploy/init-debian.sh
+sudo bash deploy/init.sh
 # 全程无交互约 3~10 分钟，取决于网络
+# Debian/Ubuntu 用户也可继续用 bash deploy/init-debian.sh（兼容入口，转发到 init.sh）
 ```
 
-脚本会做这些事（详见 [init-debian.sh](deploy/init-debian.sh)）：
+脚本会自动识别发行版并做这些事（详见 [init.sh](deploy/init.sh)）：
 
-1. `apt update && apt upgrade`，装基础工具（curl/ufw/fail2ban/git/vim/htop/jq）
-2. 装 **Docker 官方版** + **Compose v2 插件**（不是旧版 `docker-compose`）
+1. 刷新包索引并装基础工具（curl/fail2ban/git/vim/htop/jq/tzdata 等）
+2. 装 **Docker 官方版** + **Compose v2 插件**（按发行版添加官方仓库；Arch 用官方源）
 3. 启用 Docker 开机自启
-4. UFW 防火墙：只允许 22(ssh) / 80(http) / 443(https)，默认拒绝其他入站
+4. 防火墙：Debian/Arch 用 ufw，RHEL/openSUSE 用 firewalld；只允许 22(ssh) / 80(http) / 443(https)
 5. fail2ban 防爆破 SSH
-6. 创建部署目录 `/opt/player22/...`
-7. 装 **certbot**（Let's Encrypt 免费证书）
+6. 创建部署目录 `/opt/player2/...`
+7. 装 **certbot**（Let's Encrypt 免费证书；RHEL 系自动启用 EPEL）
 8. sysctl 调优：`fs.file-max=1M`、`somaxconn=65535`、`tcp_tw_reuse` 以撑 WebSocket 长连接
 9. 写 `/etc/security/limits.conf` nofile 上限
 10. Docker daemon.json：日志轮转 50M×3 份
@@ -770,7 +779,7 @@ DeepSeek R1 推理慢是正常的（670B 模型首 token 3~8s）。优化：
 
 ### ❌ Q7：容器日志撑爆磁盘
 
-`deploy/init-debian.sh` 和 compose 文件里都写了 Docker 日志轮转：`max-size=50m max-file=5`。单容器最多 250M，3 个容器 750MB。
+`deploy/init.sh` 和 compose 文件里都写了 Docker 日志轮转：`max-size=50m max-file=3`。单容器最多 150M，容器合计数百 MB。
 
 如果还是磁盘满：
 

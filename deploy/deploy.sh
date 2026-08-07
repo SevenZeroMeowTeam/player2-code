@@ -201,6 +201,43 @@ docker compose build --pull
 log "停止旧容器..."
 docker compose down --remove-orphans || true
 
+# ---- 释放 80/443 端口（停宿主机 nginx/apache，避免与 player2-nginx 冲突）----
+# docker compose down 之后若 80/443 仍被占，一定是宿主机服务（nginx/apache/宝塔）
+port_busy() { ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1$"; }
+
+if port_busy 80 || port_busy 443; then
+  log "检测到 80/443 被宿主机服务占用，尝试释放..."
+  # 常见占用者：nginx / apache2 / httpd
+  if systemctl is-active --quiet nginx 2>/dev/null; then
+    systemctl stop nginx && log "已停止宿主机 nginx（如需永久禁用：systemctl disable nginx）"
+  fi
+  if systemctl is-active --quiet apache2 2>/dev/null; then
+    systemctl stop apache2 && log "已停止 apache2"
+  fi
+  if systemctl is-active --quiet httpd 2>/dev/null; then
+    systemctl stop httpd && log "已停止 httpd"
+  fi
+  # 宝塔面板（其内置 nginx 会抢占 80/443）
+  if systemctl is-active --quiet bt 2>/dev/null; then
+    warn "检测到宝塔面板(bt)运行中，其 nginx 可能抢占 80/443。如仍冲突请执行：systemctl stop bt"
+  fi
+  sleep 1
+fi
+
+# 复检：若仍被占，给出占用者并中止
+_still=0
+if port_busy 80; then
+  warn "80 端口仍被占用：$(ss -ltnp 2>/dev/null | awk '$4~/:80$/{print $NF}' | head -1)"
+  _still=1
+fi
+if port_busy 443; then
+  warn "443 端口仍被占用：$(ss -ltnp 2>/dev/null | awk '$4~/:443$/{print $NF}' | head -1)"
+  _still=1
+fi
+if [[ "$_still" == "1" ]]; then
+  die "80/443 仍被宿主机占用，player2-nginx 无法启动。请手动释放后重试：bash deploy/deploy.sh"
+fi
+
 log "启动新容器..."
 docker compose up -d
 

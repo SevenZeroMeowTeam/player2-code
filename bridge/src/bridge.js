@@ -112,8 +112,45 @@ socket.on('disconnect', () => {
   if (perceptionTimer) clearInterval(perceptionTimer);
 });
 
-socket.on('player:spawn', (playerConfig) => {
-  console.log('[Socket] Spawn requested:', playerConfig);
+socket.on('player:spawn', async (playerConfig) => {
+  console.log('[Socket] Spawn requested:', playerConfig.name || playerConfig.playerId);
+  // bridge 单 bot 模式：bot 尚未创建时按 NPC 名字创建
+  if (!bot) {
+    if (playerConfig.name) CONFIG.playerName = playerConfig.name;
+    try {
+      bot = await createBot();
+      perceptionCollector = new PerceptionCollector(bot, CONFIG.viewDistance);
+      actionExecutor = new ActionExecutor(bot);
+      startPerceptionLoop();
+    } catch (err) {
+      console.error('[Bot] spawn failed:', err.message);
+      socket.emit('mod:event', { type: 'error', error: err.message });
+    }
+  }
+});
+
+// 官方 NPC 响应：message → 假玩家说话；command[] → 执行 FunctionCall 动作
+socket.on('npc:response', ({ playerId, npcId, message, command }) => {
+  if (message && bot) {
+    bot.chat(message);
+    console.log(`[NPC] ${playerId}: ${message}`);
+  }
+  if (Array.isArray(command) && actionExecutor) {
+    for (const fc of command) {
+      console.log(`[NPC cmd] ${fc.name} ${fc.arguments || ''}`);
+      actionExecutor.executeFunctionCall(fc);
+    }
+  }
+});
+
+// NPC 被删除时移除假玩家
+socket.on('player:kill', ({ playerId }) => {
+  console.log('[Socket] Kill requested:', playerId);
+  if (bot) {
+    bot.quit('npc killed');
+    bot = null;
+    if (perceptionTimer) clearInterval(perceptionTimer);
+  }
 });
 
 socket.on('player:actions', ({ playerId, actions, reasoning }) => {

@@ -130,6 +130,28 @@ object WsBridgeClient {
             "mod:event" -> {
                     Player2Mod.LOG.info("[WS Event] ${data}")
             }
+            // 官方 NPC 响应：message → 假玩家说话；command[] → FunctionCall 转为 Action 执行
+            "npc:response" -> {
+                val message = data.get("message")?.asString
+                val commandArr = data.getAsJsonArray("command")
+                if (!message.isNullOrEmpty()) {
+                    ActionExecutor.enqueue(player, listOf(cn.qlm.player2.manager.Action("chat", message = message)))
+                }
+                if (commandArr != null) {
+                    val actions = commandArr.mapNotNull { el ->
+                        val fc = el.asJsonObject
+                        val name = fc.get("name")?.asString ?: return@mapNotNull null
+                        val argsStr = fc.get("arguments")?.asString ?: "{}"
+                        val args = try { JsonParser.parseString(argsStr).asJsonObject } catch (_: Throwable) { JsonObject() }
+                        functionCallToAction(name, args)
+                    }
+                    if (actions.isNotEmpty()) ActionExecutor.enqueue(player, actions)
+                }
+            }
+            // NPC 被删除：移除假玩家
+            "player:kill" -> {
+                FakePlayerManager.remove(playerId)
+            }
         }
     }
 
@@ -156,5 +178,24 @@ object WsBridgeClient {
             else -> null
         }
         if (a != null) ActionExecutor.enqueue(p, listOf(a))
+    }
+
+    /** 把官方 FunctionCall（name + arguments JSON）映射为 mod 的 Action */
+    private fun functionCallToAction(name: String, args: JsonObject): cn.qlm.player2.manager.Action? {
+        return when (name) {
+            "move" -> cn.qlm.player2.manager.Action("move", direction = args.get("direction")?.asString, durationMs = args.get("durationMs")?.asLong ?: 300)
+            "look" -> cn.qlm.player2.manager.Action("look", yaw = args.get("yaw")?.asFloat, pitch = args.get("pitch")?.asFloat)
+            "lookAt" -> cn.qlm.player2.manager.Action("lookAt", x = args.get("x")?.asDouble, y = args.get("y")?.asDouble, z = args.get("z")?.asDouble)
+            "breakBlock" -> cn.qlm.player2.manager.Action("break", x = args.get("x")?.asDouble, y = args.get("y")?.asDouble, z = args.get("z")?.asDouble)
+            "placeBlock" -> cn.qlm.player2.manager.Action("place", x = args.get("x")?.asDouble, y = args.get("y")?.asDouble, z = args.get("z")?.asDouble, blockName = args.get("blockName")?.asString)
+            "attackNearest" -> cn.qlm.player2.manager.Action("attackNearest", direction = args.get("type")?.asString, durationMs = args.get("range")?.asLong ?: 5)
+            "attackEntity" -> cn.qlm.player2.manager.Action("attack", targetEntityId = args.get("entityId")?.asInt)
+            "jump" -> cn.qlm.player2.manager.Action("jump")
+            "stop" -> cn.qlm.player2.manager.Action("stop")
+            "switchSlot" -> cn.qlm.player2.manager.Action("switchSlot", slot = args.get("slot")?.asInt)
+            "useItem" -> cn.qlm.player2.manager.Action("useItem")
+            "chat" -> cn.qlm.player2.manager.Action("chat", message = args.get("message")?.asString)
+            else -> null
+        }
     }
 }

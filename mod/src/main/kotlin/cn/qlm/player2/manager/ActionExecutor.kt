@@ -70,6 +70,7 @@ object ActionExecutor {
             "break" -> breakBlock(p, a.x, a.y, a.z)
             "place" -> placeBlock(p, a.x, a.y, a.z, a.blockName)
             "attack" -> attackEntity(p, a.targetEntityId)
+            "attackNearest" -> attackNearest(p, a.direction, a.durationMs.toInt())
             "interact" -> interactBlock(p, a.x, a.y, a.z)
             "useItem" -> useItem(p)
             "switchSlot" -> switchSlot(p, a.slot)
@@ -139,6 +140,20 @@ object ActionExecutor {
         val sp = p as? net.minecraft.server.level.ServerPlayer ?: return
         val target = sp.level().getEntity(targetId) ?: return
         sp.attack(target)
+    }
+
+    private fun attackNearest(p: Player, type: String?, range: Int) {
+        val sp = p as? net.minecraft.server.level.ServerPlayer ?: return
+        val level = sp.serverLevel()
+        val r = if (range > 0) range else 5
+        val target = level.allEntities.asIterable().filter { e ->
+            e !== p && e.isAlive && e.distanceTo(p) <= r && when (type) {
+                "mob" -> e is net.minecraft.world.entity.Mob
+                "player" -> e is Player && e !== p
+                else -> true
+            }
+        }.minByOrNull { it.distanceTo(p) }
+        if (target != null) sp.attack(target)
     }
 
     private fun interactBlock(p: Player, x: Double?, y: Double?, z: Double?) {

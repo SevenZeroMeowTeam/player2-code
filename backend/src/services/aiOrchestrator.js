@@ -37,6 +37,114 @@ JSON 格式:
     };
   }
 
+  get chatModel() {
+    return process.env.AI_CHAT_MODEL || this.model;
+  }
+
+  /**
+   * 官方 NPC 对话模式（对齐 POST /npcs/{id}/chat + /npcs/responses）
+   * 用 NPC 的 system_prompt + character_description 构建系统消息，
+   * 把 NPC 的 commands 转成 OpenAI tools，由 LLM 决定回复文本与函数调用(command)。
+   * 返回 NpcApiChatResponse 结构：{ npc_id, message, command, audio, error, _reasoning }
+   */
+  async npcChat(npc, senderName, senderMessage, gameStateInfo) {
+    const systemParts = [npc.system_prompt];
+    if (npc.character_description) systemParts.push(`\n[角色背景] ${npc.character_description}`);
+    systemParts.push(`\n你的名字是 ${npc.name}。你身处真实的 Minecraft 1.20.1 生存世界，可以借助提供的函数移动/挖掘/战斗/聊天。回复要简短自然，像真实玩家。`);
+    const system = systemParts.join('');
+
+    const userContent = gameStateInfo
+      ? `[当前游戏状态]\n${gameStateInfo}\n\n${senderName}: ${senderMessage}`
+      : `${senderName}: ${senderMessage}`;
+
+    const messages = [
+      { role: 'system', content: system },
+      ...(npc.history || []),
+      { role: 'user', content: userContent }
+    ];
+
+    const model = this.chatModel;
+    const isReasoner = /reasoner|r1/i.test(model);
+    const tools = (npc.commands || []).map(c => ({
+      type: 'function',
+      function: { name: c.name, description: c.description, parameters: c.parameters }
+    }));
+
+    const payload = { model, messages, temperature: isReasoner ? 0.95 : 0.8 };
+    if (!isReasoner && tools.length) {
+      payload.tools = tools;
+      payload.tool_choice = 'auto';
+    }
+
+    try {
+      const resp = await axios.post(
+        `${this.apiBase}/chat/completions`,
+        payload,
+        {
+          headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+          timeout: 60000
+        }
+      );
+      const msg = resp.data.choices[0].message;
+      const reasoning = msg.reasoning_content || msg.thinking_content || '';
+
+      let command = null;
+      let toolCallsForHistory = null;
+
+      if (msg.tool_calls && msg.tool_calls.length) {
+        toolCallsForHistory = msg.tool_calls;
+        command = msg.tool_calls.map(tc => ({
+          name: tc.function.name,
+          arguments: tc.function.arguments
+        }));
+      } else if (isReasoner) {
+        // R1 不支持 tool_calls，尝试从 content 解析 JSON 动作
+        const parsed = this._safeParse(msg.content || '');
+        if (parsed && Array.isArray(parsed.actions) && parsed.actions.length) {
+          command = parsed.actions.map(a => ({
+            name: a.type,
+            arguments: JSON.stringify(a)
+          }));
+        }
+      }
+
+      let message = (msg.content || '').trim();
+      // 若所有 command 都是 silent（never_respond_with_message），则清空文本
+      if (command && command.length) {
+        const silentNames = new Set(
+          (npc.commands || []).filter(c => c.never_respond_with_message).map(c => c.name)
+        );
+        if (silentNames.size && command.every(c => silentNames.has(c.name))) {
+          message = '';
+        }
+      }
+
+      return {
+        npc_id: npc.id,
+        message,
+        command,
+        audio: null,
+        error: null,
+        _reasoning: reasoning,
+        _toolCallsForHistory: toolCallsForHistory
+      };
+    } catch (err) {
+      console.error('[NPC Chat failed]', err.response?.data || err.message);
+      return {
+        npc_id: npc.id,
+        message: '',
+        command: null,
+        audio: null,
+        error: {
+          error_code: err.response?.status === 429 ? 'rate_limited'
+            : err.response?.status === 402 ? 'insufficient_credits'
+            : 'service_unavailable',
+          error_message: err.message || 'AI 服务不可达'
+        }
+      };
+    }
+  }
+
   async createPlayer(config) {
     const player = {
       ...config,

@@ -5,6 +5,8 @@ const cors = require('cors');
 const { Server } = require('socket.io');
 const AIOrchestrator = require('./services/aiOrchestrator');
 const ClientRegistry = require('./services/clientRegistry');
+const NpcManager = require('./services/npcManager');
+const createNpcRouter = require('./routes/npcs');
 const authMiddleware = require('./middleware/auth');
 
 const app = express();
@@ -25,9 +27,17 @@ const aiOrchestrator = new AIOrchestrator(
   process.env.AI_API_KEY,
   process.env.AI_MODEL || 'deepseek-reasoner'
 );
+const npcManager = new NpcManager();
+
+// 对齐 player2-sdk-ts 官方 API 契约的 REST + SSE 路由
+app.use(createNpcRouter({ npcManager, aiOrchestrator, clientRegistry, io }));
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', onlineClients: clientRegistry.count() });
+  res.json({
+    status: 'ok',
+    onlineClients: clientRegistry.count(),
+    npcs: npcManager.count()
+  });
 });
 
 app.post('/api/v1/auth/login', authMiddleware.login);

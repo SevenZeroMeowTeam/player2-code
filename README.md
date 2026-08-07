@@ -40,6 +40,7 @@ Player2 是一套完整的、可自托管的 Minecraft AI 玩家平台：使用 
 - 🔐 **JWT 多租户**：每个用户独立 AI 玩家配额，互不干扰
 - 🐳 **Docker 一键部署**：nginx + HSTS + WebSocket 长连接 + 证书自动签
 - ⚡ **双 AI 网关回退**：优先 `ai.bbsmc.org.cn`，失败自动切 `api.deepseek.com`
+- 🧩 **官方 API 兼容**：对齐 [`elefant-ai/player2-sdk-ts`](https://github.com/elefant-ai) 契约，可用官方 SDK 直接对接（详见 [官方 API 兼容性](#八官方-player2-api-兼容性)）
 
 ---
 
@@ -80,6 +81,9 @@ player22/
 │   ├── logs.sh / status.sh
 │   ├── nginx.conf        # HSTS + WebSocket 7200s + gzip + 80→301→443
 │   └── LINUX_SETUP.md    # 11 章超详细部署手册
+├── player2-sdk-ts/       # 官方 Player2 TypeScript SDK（API 契约参考，未打包进运行时）
+│   ├── src/{types,services,schemas}.gen.ts
+│   └── README.md
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml    # backend + web + nginx 三容器编排
@@ -262,6 +266,128 @@ curl -I https://player.qlm.org.cn   # HTTP/2 200 + HSTS
 - [ ] UFW 只放 22/80/443，25565 按需
 - [ ] DeepSeek 控制台已启用子 Key + 额度告警
 - [ ] certbot `--dry-run` 续签成功，`systemctl list-timers | grep certbot`
+
+---
+
+## 八、官方 Player2 API 兼容性
+
+自 `backend/src/routes/npcs.js` 起全面对齐 [`elefant-ai/player2-sdk-ts`](https://github.com/elefant-ai) 的 REST + SSE 契约，**官方 SDK 可直接指向本服务的域名使用**。
+
+### 8.1 端点清单
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|:----:|
+| `POST` | `/npcs/spawn` | 创建 NPC，返回 `text/plain` 的 `npc_id`（UUID） | ✅ |
+| `GET`  | `/npcs` | （扩展）列出当前用户的所有 NPC | ✅ |
+| `GET`  | `/npcs/responses` | NPC 响应流，支持 `Accept: text/event-stream`（SSE）或 newline-delimited JSON | ✅ |
+| `POST` | `/npcs/:npcId/chat` | 向 NPC 发送消息，触发 LLM 决策；返回 `{ queued, npc_id }`，实际响应走 `/npcs/responses` | ✅ |
+| `POST` | `/npcs/:npcId/kill` | 删除 NPC 并通知 bridge/mod 移除假玩家 | ✅ |
+| `GET`  | `/npcs/:npcId/history` | 获取对话历史，返回 `{ npc_id, history: [...] }` | ✅ |
+| `GET`  | `/joules` | 自托管返回 `{ joules: 999999, patron_tier: "Patron VVIP" }` | ✅ |
+| `GET`  | `/selected_characters` | 角色库暂未接入，返回 `{ characters: [] }` | ✅ |
+| `GET`  | `/tts/voices` | TTS 暂未启用，返回 `{ voices: [] }` | ✅ |
+| `GET`  | `/health` | 健康检查（无需鉴权） | ❌ |
+
+### 8.2 鉴权
+
+所有 `/npcs`、`/joules`、`/selected_characters`、`/tts` 路径强制 JWT，支持两种传递方式：
+
+- Header：`Authorization: Bearer <token>`
+- Query：`?token=<token>`（EventSource 无法设置 header 时使用）
+
+登录获取 token：`POST /api/v1/auth/login` `{ username, password } → { token }`。
+
+### 8.3 NPC 响应流（SSE）
+
+请求示例：
+
+```bash
+curl -N -H "Authorization: Bearer $TOKEN" \
+     -H "Accept: text/event-stream" \
+     https://player.qlm.org.cn/npcs/responses
+```
+
+事件格式：
+
+```
+event: npc_response
+data: {"npc_id":"<uuid>","message":"hi","command":[{"name":"move","arguments":"{\"direction\":\"forward\",\"durationMs\":1000}"}],"audio":null,"error":null}
+```
+
+字段说明：
+
+- `message`：NPC 的聊天回复（可为 `null`）
+- `command`：`FunctionCall[]`，`arguments` 为 JSON 字符串，与官方 SDK 一致
+- `error`：`{ error_code, error_message } | null`
+- `audio`：自托管始终为 `null`（TTS 未启用）
+
+### 8.4 spawn / chat 请求体
+
+```jsonc
+// POST /npcs/spawn
+{
+  "name": "AI_Steve",                  // 必填
+  "short_name": "Steve",                // 留空则取 name
+  "character_description": "开朗的矿工",
+  "system_prompt": "你是 Steve，用玩家口吻简短回复。"
+}
+
+// POST /npcs/:npcId/chat
+{
+  "sender_name": "Web控制台",
+  "sender_message": "去挖一组铁矿",
+  "game_state_info": null               // 可选：MC 坐标/生命等
+}
+```
+
+### 8.5 FunctionCall → 游戏内动作映射
+
+bridge（`src/actions.js`）与 Forge mod（`WsBridgeClient.kt#functionCallToAction`）共用如下映射，对齐官方命令语义：
+
+| FunctionCall.name | arguments 关键字段 | 动作 |
+|-------------------|--------------------|------|
+| `move`            | `direction`, `durationMs` | 前/后/左/右 移动 |
+| `look`            | `yaw`, `pitch`            | 转头 |
+| `lookAt`          | `x`, `y`, `z`             | 朝向坐标 |
+| `breakBlock`      | `x`, `y`, `z`             | 挖掘方块 |
+| `placeBlock`      | `x`, `y`, `z`, `blockName`| 放置方块 |
+| `attackNearest`   | `type`, `range`           | 攻击最近的 mob/player |
+| `attackEntity`    | `entityId`                | 攻击指定实体 |
+| `jump`            | —                         | 跳跃 |
+| `stop`            | —                         | 停止当前动作 |
+| `switchSlot`      | `slot`                    | 切换快捷栏槽位 |
+| `useItem`         | —                         | 使用手持物品 |
+| `chat`            | `message`                 | 发送聊天 |
+
+### 8.6 用官方 SDK 对接示例
+
+```ts
+import { NpcService, OpenAPI } from 'player2-sdk-ts'
+
+OpenAPI.BASE = 'https://player.qlm.org.cn'
+OpenAPI.TOKEN = '<jwt-from-/api/v1/auth/login>'
+
+const npcId = await NpcService.spawnNpc({
+  name: 'AI_Steve',
+  short_name: 'Steve',
+  character_description: '开朗的矿工',
+  system_prompt: '你是 Steve。'
+})
+
+await NpcService.npcChat(npcId, {
+  sender_name: '玩家',
+  sender_message: '去挖煤'
+})
+
+// 监听 SSE
+const es = new EventSource(`${OpenAPI.BASE}/npcs/responses?token=${OpenAPI.TOKEN}`)
+es.addEventListener('npc_response', (ev) => {
+  const r = JSON.parse(ev.data)
+  console.log(r.npc_id, r.message, r.command)
+})
+```
+
+> 注：`/npcs`（列表）为本服务的扩展端点，不在官方 SDK 中；其余端点签名与官方一致。
 
 ---
 

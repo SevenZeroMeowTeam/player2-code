@@ -147,6 +147,32 @@ class ActionExecutor {
   chat(message) {
     if (message) this.bot.chat(message);
   }
+
+  /**
+   * 执行官方 FunctionCall（来自 /npcs/responses 的 command 项）
+   * fc = { name: string, arguments: string(JSON) }
+   * name 对齐 npcManager.DEFAULT_MC_COMMANDS 的工具名。
+   */
+  async executeFunctionCall(fc) {
+    if (!fc || !fc.name) return;
+    let args = {};
+    try { args = JSON.parse(fc.arguments || '{}'); } catch (e) { /* 空参数 */ }
+    switch (fc.name) {
+      case 'move':           return this.move(args.direction, args.durationMs);
+      case 'look':           return this.look(args.yaw, args.pitch);
+      case 'lookAt':         return this.lookAt(args.x, args.y, args.z);
+      case 'breakBlock':     return this.breakBlock(args.x, args.y, args.z);
+      case 'placeBlock':     return this.placeBlock(args.x, args.y, args.z, args.blockName);
+      case 'attackNearest':  return this.attackNearest(args.type, args.range);
+      case 'attackEntity':   return this.attackEntity(args.entityId);
+      case 'jump':           return this.jump();
+      case 'stop':           return this.stopAll();
+      case 'switchSlot':     return this.switchSlot(args.slot);
+      case 'useItem':        return this.useItem();
+      case 'chat':           return this.chat(args.message);
+      default: console.warn('[FunctionCall] unknown command:', fc.name);
+    }
+  }
 }
 
 module.exports = ActionExecutor;
